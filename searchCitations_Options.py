@@ -29,8 +29,10 @@ if not options.inFile and not options.title:
 if not options.outFile:
 	if options.inFile:
 		options.outFile = 'cit_' + options.inFile
+		options.resumee = 'cit_r_' + options.inFile
 	else:
 		options.outFile = 'cit_' + options.title + '.csv'
+		options.resumee = ''
 
 if not options.inDelimiter:
 	options.inDelimiter = options.delimiter

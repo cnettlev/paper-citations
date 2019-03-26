@@ -43,9 +43,10 @@ def compareTitles(title1,title2,opt=options.matcher):
         return title1==title2
 
 ## Dictionary item
-dItem = OrderedDict([('Title',''),('Author',''),('Source title',''),('Publisher',''),('Document Type',''),('DOI',''),('Volume',''),('Issue','')])
+dItem = OrderedDict([('Title',''),('Author',''),('Source title',''),('Publisher',''),('Document Type',''),('DOI',''),('Volume',''),('Issue',''),('Cite title',''),('Cite author','')])
+rItem = OrderedDict([('Title',''),('Author',''),('Cited by','')])
 
-def addItem(wtr,title,authors='',name='',pub='',type='',doi='',vol='',issue=''):
+def addItem(wtr,title,authors='',name='',pub='',type='',doi='',vol='',issue='',cit_title='',cit_author=''):
     dItem['Title']         = title
     dItem['Author']        = authors
     dItem['Source title']  = name
@@ -54,10 +55,25 @@ def addItem(wtr,title,authors='',name='',pub='',type='',doi='',vol='',issue=''):
     dItem['DOI']           = doi
     dItem['Volume']        = vol
     dItem['Issue']         = issue
+    dItem['Cite title']    = cit_title
+    dItem['Cite author']   = cit_author
 
-    dict_writer.writerow(dItem)
+    wtr.writerow(dItem)
 
-def searchAndAppend(title,querier,writer,lastTry='',tryAgain=True):
+def addItemResumee(wtr,title,author,citations):
+    rItem['Title']         = title
+    rItem['Author']        = author
+    rItem['Cited by']      = citations
+
+    wtr.writerow(rItem)
+
+def searchAndAppend(title,querier,writer,writer_r='',lastTry='',tryAgain=True):
+    if len(title) == 2:
+        author = title[1]
+        title = title[0]
+    else:
+        author = ''
+
     print 'Searching for',title
     ## Searching into scholar
     scholarSearch = querier.search_pubs_query(title)
@@ -84,6 +100,10 @@ def searchAndAppend(title,querier,writer,lastTry='',tryAgain=True):
                 print 'Searching cited by'
                 cb = paper.get_citedby()
                 count = 0
+
+                if writer_r:
+                    # print "Adding writter"
+                    addItemResumee(writer_r,title,author,paper.citedby)
 
                 print
                 for citation in cb:
@@ -113,20 +133,20 @@ def searchAndAppend(title,querier,writer,lastTry='',tryAgain=True):
                                 cTitle = cTitle[0]
                             addItem(writer,z.get('title')[0],authorData,cTitle,
                                 z.get('publisher',''),z.get('type',''),z.get('DOI',''),
-                                z.get('volume',''),z.get('issue',''))
+                                z.get('volume',''),z.get('issue',''),title,author)
                             break
 
                     if not found:
                         print '\t*** Unable to find title in Crossref! ***'
 
-                        addItem(writer,bibItem['title'],bibItem['author'],pub=bibItem['publisher'],type='other')
+                        addItem(writer,bibItem['title'],bibItem['author'],pub=bibItem['publisher'],type='other',cit_title=title,cit_author=author)
 
                     print
             break
     if not scholarFound and tryAgain:
         print 'Not found!!'
         if lastTry:
-            searchAndAppend(title+' '+lastTry,querier,writer,lastTry,False)
+            searchAndAppend(title+' '+lastTry,querier,writer,writer_r,lastTry,False)
 
 
 ## Writing results in CSV
@@ -144,27 +164,41 @@ with open(options.outFile,'wb') as output_file:
             csvfile.seek(0)
             reader.__init__(csvfile, delimiter=options.inDelimiter)
             cArticle = 1
+            if options.resumee:
+                resumee = open(options.resumee,'wb')
+                dict_writer_r = csv.DictWriter(resumee, rItem.keys(),encoding='utf-8',delimiter=options.outDelimiter)
+                dict_writer_r.writeheader()
+            else:
+                dict_writer_r = ''
             for row in reader:
                 print "\nArticle",cArticle,"of",nArticles
                 cArticle += 1
                 ## Searching title in google scholar
                 title = row.get('Title','') # 'The interaction of maturational constraints and intrinsic motivations in active motor development'
+
                 if not title:
                     title = row.get('Article Title','')
                 if not title:
                     print 'Error with CSV identifier. It must contain either Title or Article Title'
                     exit()
+
+                if options.resumee:
+                    author = row.get('Authors','')
+                    title = (title,author)
+
                 if options.lastTry:
                     lt = ''
                     if options.lastTry is not None:
                         lt = row.get(options.lastTry,'')
                         if not lt:
                             lt = options.lastTry
-                    searchAndAppend(title,scQuerier,dict_writer,lt)
+                    searchAndAppend(title,scQuerier,dict_writer,dict_writer_r,lt)
                 else:
-                    searchAndAppend(title,scQuerier,dict_writer)
+                    searchAndAppend(title,scQuerier,dict_writer,dict_writer_r)
+        if options.resumee:
+            resumee.close()
     else:
-        searchAndAppend(options.title,scQuerier,dict_writer,options.lastTry)
+        searchAndAppend(options.title,scQuerier,dict_writer,lastTry=options.lastTry)
 
 # ## Writing results in CSV
 # if len(articlesDict):
