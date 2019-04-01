@@ -93,6 +93,10 @@ def searchAndAppend(title,querier,writer,writer_r='',lastTry='',tryAgain=True):
             print 'Found: ',paper.bib['title']
             print 'Authors:',paper.bib['author']
             print 'Cited by:',paper.citedby
+            
+            if writer_r:
+                # print "Adding writter"
+                addItemResumee(writer_r,title,author,paper.citedby)
 
             if paper.citedby:
                 ## Searching citations to article
@@ -101,9 +105,6 @@ def searchAndAppend(title,querier,writer,writer_r='',lastTry='',tryAgain=True):
                 cb = paper.get_citedby()
                 count = 0
 
-                if writer_r:
-                    # print "Adding writter"
-                    addItemResumee(writer_r,title,author,paper.citedby)
 
                 print
                 for citation in cb:
