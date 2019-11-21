@@ -33,6 +33,8 @@ if not options.outFile:
 	else:
 		options.outFile = 'cit_' + options.title + '.csv'
 		options.resumee = ''
+else:
+	options.resumee = 'r-' + options.outFile
 
 if not options.inDelimiter:
 	options.inDelimiter = options.delimiter

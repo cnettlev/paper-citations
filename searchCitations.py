@@ -6,6 +6,8 @@ import unicodecsv as csv
 from collections import OrderedDict
 from string import punctuation
 from difflib import SequenceMatcher
+import shutil  
+from os import path
 # Retrieving command-line arguments
 from searchCitations_Options import options
 
@@ -116,7 +118,7 @@ def searchAndAppend(title,querier,writer,writer_r='',lastTry='',tryAgain=True):
                     print '\tPublisher\t',bibItem['publisher']
 
                     cit_cleanTitle = cleanTitle(bibItem['title'].encode("ascii","ignore"))[0:MAX_CHAR]
-                    crSearch = cr.works(query_title=bibItem['title']+' '+bibItem['author'],sort='score',limit=5)
+                    crSearch = cr.works(query=bibItem['title']+' '+bibItem['author'],sort='score',limit=5)
                     found = False
 
                     for z in crSearch['message']['items']:
@@ -149,11 +151,36 @@ def searchAndAppend(title,querier,writer,writer_r='',lastTry='',tryAgain=True):
         if lastTry:
             searchAndAppend(title+' '+lastTry,querier,writer,writer_r,lastTry,False)
 
+def start_from_previous_work():
+    if path.exists(options.resumee):
+        with open(options.resumee) as resumee:
+            reader = csv.DictReader(resumee,delimiter=options.inDelimiter)
+            nArticles = len(list(reader))
+            resumee.seek(0)
+            cArticle = 1
+
+            new_resumee = open(options.resumee+'2','wb')
+            other = csv.DictWriter(new_resumee, rItem.keys(),encoding='utf-8',delimiter=options.outDelimiter)
+            other.writeheader()
+
+            for row in reader:
+                if cArticle < nArticles:
+                    addItemResumee(other,row.get('Title',''),row.get('Author',''),row.get('Cited by',''))
+                cArticle += 1
+
+        shutil.move(options.resumee+'2',options.resumee)
+
+        return cArticle
+    return 0
+
+alreadyHere = path.exists(options.outFile)
 
 ## Writing results in CSV
-with open(options.outFile,'wb') as output_file:
+with open(options.outFile,'a') as output_file:
+    
     dict_writer = csv.DictWriter(output_file, dItem.keys(),encoding='utf-8',delimiter=options.outDelimiter)
-    dict_writer.writeheader()
+    if not alreadyHere:
+        dict_writer.writeheader()
 
     scQuerier = sc.querier('search_cookies.tmp')
 
@@ -165,15 +192,20 @@ with open(options.outFile,'wb') as output_file:
             csvfile.seek(0)
             reader.__init__(csvfile, delimiter=options.inDelimiter)
             cArticle = 1
+            pArticles = start_from_previous_work()
             if options.resumee:
-                resumee = open(options.resumee,'wb')
+                resumee = open(options.resumee,'a')
                 dict_writer_r = csv.DictWriter(resumee, rItem.keys(),encoding='utf-8',delimiter=options.outDelimiter)
-                dict_writer_r.writeheader()
+                if not pArticles:
+                    dict_writer_r.writeheader()
             else:
                 dict_writer_r = ''
             for row in reader:
                 print "\nArticle",cArticle,"of",nArticles
                 cArticle += 1
+
+                if cArticle < pArticles:
+                    continue
                 ## Searching title in google scholar
                 title = row.get('Title','') # 'The interaction of maturational constraints and intrinsic motivations in active motor development'
 
