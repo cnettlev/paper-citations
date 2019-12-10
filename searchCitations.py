@@ -6,9 +6,16 @@ import unicodecsv as csv
 from collections import OrderedDict
 from string import punctuation
 from difflib import SequenceMatcher
-import shutil  
-from os import path
 import time
+from os import path, rename, getcwd
+import sys
+
+try:
+    sys.path.insert(1, getcwd()+'../csv-articles/src/')
+    import reformat
+except ImportError:
+    reformat = None 
+
 # Retrieving command-line arguments
 from searchCitations_Options import options
 
@@ -47,20 +54,24 @@ def compareTitles(title1,title2,opt=options.matcher):
         return title1==title2
 
 ## Dictionary item
-dItem = OrderedDict([('Title',''),('Author',''),('Source title',''),('Publisher',''),('Document Type',''),('DOI',''),('Volume',''),('Issue',''),('Cite title',''),('Cite author','')])
+dItem = OrderedDict([('No. Citation',''),('Title',''),('First Author',''),('Authors',''),('Container',''),('Publisher',''),('Document Type',''),('DOI',''),('Volume',''),('Issue',''),('No. Article','')])
 rItem = OrderedDict([('Title',''),('Author',''),('Cited by','')])
 
-def addItem(wtr,title,authors='',name='',pub='',type='',doi='',vol='',issue='',cit_title='',cit_author=''):
+def addItem(wtr,nCitation,title,authors='',container='',pub='',type='',doi='',vol='',issue='',nCitedArticle=0):
+    if reformat:
+        reformat.reformatAuthors(authors)
+
+    dItem['No. Citation']  = nCitation
     dItem['Title']         = title
-    dItem['Author']        = authors
-    dItem['Source title']  = name
+    dItem['First Author']  = authors.split(',')[0]
+    dItem['Authors']       = authors
+    dItem['Container']     = container
     dItem['Publisher']     = pub
     dItem['Document Type'] = type
     dItem['DOI']           = doi
     dItem['Volume']        = vol
     dItem['Issue']         = issue
-    dItem['Cite title']    = cit_title
-    dItem['Cite author']   = cit_author
+    dItem['No. Article']   = nCitedArticle
 
     wtr.writerow(dItem)
 
@@ -71,7 +82,7 @@ def addItemResumee(wtr,title,author,citations):
 
     wtr.writerow(rItem)
 
-def searchAndAppend(title,querier,writer,writer_r='',lastTry='',tryAgain=True):
+def searchAndAppend(nArticle,title,querier,writer,writer_r='',lastTry='',tryAgain=True):
     if len(title) == 2:
         author = title[1]
         title = title[0]
@@ -121,65 +132,88 @@ def searchAndAppend(title,querier,writer,writer_r='',lastTry='',tryAgain=True):
 
                     cit_cleanTitle = cleanTitle(bibItem['title'].encode("ascii","ignore"))[0:MAX_CHAR]
                     time.sleep(0.03)
-                    crSearch = cr.works(query=bibItem['title']+' '+bibItem['author'],sort='score',limit=5)
+                    crSearch = cr.works(query=bibItem['title']+' '+bibItem['author'],limit=10)
                     found = False
 
                     for z in crSearch['message']['items']:
-                        print '\tCrossref item:\t',z['title'][0]
-                        if compareTitles(cit_cleanTitle, cleanTitle(z['title'][0].encode("ascii","ignore"))[0:MAX_CHAR]):
-                            print '\tDOI:\t\t',z['DOI']
-                            print '\tSubject:\t',z.get('subject')
+                        crTitle = z.get('title','')
+                        if crTitle:
+                            crTitle = crTitle[0]
+                            print '\tCrossref item:\t',crTitle
+                            if compareTitles(cit_cleanTitle, cleanTitle(crTitle.encode("ascii","ignore"))[0:MAX_CHAR]):
+                                print '\tDOI:\t\t',z['DOI']
+                                print '\tSubject:\t',z.get('subject')
 
-                            found = True
-                            authorData = reprintCrossReffAuthors(z.get('author',''))
-                            if not authorData:
-                                authorData = bibItem['author']
-                            cTitle = z.get('container-title','')
-                            if cTitle:
-                                cTitle = cTitle[0]
-                            addItem(writer,z.get('title')[0],authorData,cTitle,
-                                z.get('publisher',''),z.get('type',''),z.get('DOI',''),
-                                z.get('volume',''),z.get('issue',''),title,author)
-                            break
+                                found = True
+                                authorData = reprintCrossReffAuthors(z.get('author',''))
+                                if not authorData:
+                                    authorData = bibItem['author']
+
+                                cTitle = z.get('container-title','')
+                                if cTitle:
+                                    cTitle = cTitle[0]
+
+                                addItem(writer,count-1,z.get('title')[0],authors=authorData,container=cTitle,
+                                    pub=z.get('publisher',''),type=z.get('type',''),doi=z.get('DOI',''),
+                                    vol=z.get('volume',''),issue=z.get('issue',''),nCitedArticle=nArticle)
+                                break
 
                     if not found:
                         print '\t*** Unable to find title in Crossref! ***'
 
-                        addItem(writer,bibItem['title'],bibItem['author'],pub=bibItem['publisher'],type='other',cit_title=title,cit_author=author)
+                        addItem(writer,count-1,bibItem['title'],authors=bibItem['author'],pub=bibItem['publisher'],type='other',nCitedArticle=nArticle)
 
                     print
             break
     if not scholarFound and tryAgain:
         print 'Not found!!'
         if lastTry:
-            searchAndAppend(title+' '+lastTry,querier,writer,writer_r,lastTry,False)
+            searchAndAppend(nArticle,title+' '+lastTry,querier,writer,writer_r,lastTry,False)
 
 def start_from_previous_work():
+    # Check, clean and retreive information about existing data
     if path.exists(options.resumee):
         with open(options.resumee) as resumee:
-            reader = csv.DictReader(resumee,delimiter=options.inDelimiter)
+            reader = csv.DictReader(resumee,delimiter=options.outDelimiter)
             nArticles = len(list(reader))
             resumee.seek(0)
+            reader.__init__(resumee, delimiter=options.outDelimiter)
             cArticle = 1
+            citations = 0
 
             new_resumee = open(options.resumee+'2','wb')
             other = csv.DictWriter(new_resumee, rItem.keys(),encoding='utf-8',delimiter=options.outDelimiter)
             other.writeheader()
 
+            print "previous: ",nArticles
             for row in reader:
+                print row.get('Title',''),row.get('Cited by','')
                 if cArticle < nArticles:
+                    citations += float(row.get('Cited by',''))
                     addItemResumee(other,row.get('Title',''),row.get('Author',''),row.get('Cited by',''))
                 cArticle += 1
 
-        shutil.move(options.resumee+'2',options.resumee)
+        rename(options.resumee+'2',options.resumee)
 
-        return cArticle
-    return 0
+        return [cArticle,citations]
+    return [0,0]
 
+
+pArticles, pCitations = start_from_previous_work()
 alreadyHere = path.exists(options.outFile)
+openWith = 'a'
+
+if alreadyHere:
+    print "Output file "+options.outFile+" already exists. Trying to continue there..."
+    with open(options.outFile) as output_file:
+        reader = csv.DictReader(output_file,delimiter=options.outDelimiter)
+        nArticles = len(list(reader))
+        if pCitations != nArticles: # inconsistent data from previous processing
+            openWith = 'wb'
+            alreadyHere = False
 
 ## Writing results in CSV
-with open(options.outFile,'a') as output_file:
+with open(options.outFile,openWith) as output_file:
     
     dict_writer = csv.DictWriter(output_file, dItem.keys(),encoding='utf-8',delimiter=options.outDelimiter)
     if not alreadyHere:
@@ -195,20 +229,24 @@ with open(options.outFile,'a') as output_file:
             csvfile.seek(0)
             reader.__init__(csvfile, delimiter=options.inDelimiter)
             cArticle = 1
-            pArticles = start_from_previous_work()
             if options.resumee:
-                resumee = open(options.resumee,'a')
+                resumee = open(options.resumee,openWith)
                 dict_writer_r = csv.DictWriter(resumee, rItem.keys(),encoding='utf-8',delimiter=options.outDelimiter)
-                if not pArticles:
+                if not alreadyHere:
                     dict_writer_r.writeheader()
             else:
                 dict_writer_r = ''
             for row in reader:
                 print "\nArticle",cArticle,"of",nArticles
-                cArticle += 1
 
                 if cArticle < pArticles:
+                    cArticle += 1
                     continue
+                elif cArticle-1 != int(row.get('','-1')):
+                    print cArticle-1, int(row.get('','-1'))
+                    print 'Error: article number inconsistent with the one from input CSV.'
+                    exit()
+
                 ## Searching title in google scholar
                 title = row.get('Title','') # 'The interaction of maturational constraints and intrinsic motivations in active motor development'
 
@@ -228,13 +266,15 @@ with open(options.outFile,'a') as output_file:
                         lt = row.get(options.lastTry,'')
                         if not lt:
                             lt = options.lastTry
-                    searchAndAppend(title,scQuerier,dict_writer,dict_writer_r,lt)
+                    searchAndAppend(cArticle-1,title,scQuerier,dict_writer,dict_writer_r,lt)
                 else:
-                    searchAndAppend(title,scQuerier,dict_writer,dict_writer_r)
+                    searchAndAppend(cArticle-1,title,scQuerier,dict_writer,dict_writer_r)
+
+                cArticle += 1
         if options.resumee:
             resumee.close()
     else:
-        searchAndAppend(options.title,scQuerier,dict_writer,lastTry=options.lastTry)
+        searchAndAppend(0,options.title,scQuerier,dict_writer,lastTry=options.lastTry)
 
 # ## Writing results in CSV
 # if len(articlesDict):
