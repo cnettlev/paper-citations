@@ -8,6 +8,7 @@ from string import punctuation
 from difflib import SequenceMatcher
 import shutil  
 from os import path
+import time
 # Retrieving command-line arguments
 from searchCitations_Options import options
 
@@ -16,6 +17,7 @@ MAX_SCHO = 5   # Maximum entries to check with searched item
 
 ## For completing data using Crossref API habanero
 cr = Crossref()
+Crossref(mailto="cristobal.nettle@innovacionyrobotica.com")
 
 ## Utilities for fixing syntaxis
 tr_table = dict((ord(c), None) for c in (set(punctuation)))
@@ -118,6 +120,7 @@ def searchAndAppend(title,querier,writer,writer_r='',lastTry='',tryAgain=True):
                     print '\tPublisher\t',bibItem['publisher']
 
                     cit_cleanTitle = cleanTitle(bibItem['title'].encode("ascii","ignore"))[0:MAX_CHAR]
+                    time.sleep(0.03)
                     crSearch = cr.works(query=bibItem['title']+' '+bibItem['author'],sort='score',limit=5)
                     found = False
 
