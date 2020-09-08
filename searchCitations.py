@@ -135,6 +135,7 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
 
         if search['last-try']:
             search['title'] = search['title'].replace(' '+search['last-try'],'')
+        count = 0
 
         titleComparison = compareTitles(cleanTitle(search['title'])[0:MAX_CHAR], cleanTitle(paper.bib['title'])[0:MAX_CHAR])
 
@@ -160,7 +161,13 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
                 initial2 = search['author'].lower().split(' ')[1][0]
 
                 if not compareTitles(lastName,lastName2) or (initial and not initial == initial2):
-                    print '\tUnmatching author:',paper.bib['author'],'('+initial+' '+lastName+')','('+initial2+' '+lastName2+')'
+                    print '\tUnmatching author:',paper.bib['author']
+                    print '\tFrom found: ',
+                    print initial,
+                    print lastName,
+                    print 'From search: ',
+                    print initial2,
+                    print lastName2
                     continue
                 else:
                     unmatch = False
@@ -168,12 +175,14 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
 
         if unmatch:
             print 'Unmatching authors!!!'
+            print paper
             if continueOrExit():
                 continue
             search['manuallyAcceptedSc'] += 1
 
         if search['year'] and not search['year-forced'] and paper.bib['year'] != search['year']:
             print 'Unmatching year!!!'
+            print paper
             if continueOrExit():
                 continue
             if not unmatch:
@@ -189,7 +198,6 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
             addItemResumee(writer_r,search['nArticle'],search['title'],search['author'],paper.citedby,
                 manuallyAcceptedSc=search['manuallyAcceptedSc'],search=sEntry,forcedYear=search['year'] if search['year-forced'] else None)
 
-        count = 0
         if paper.citedby:
             ## Searching citations to article
             print
