@@ -177,14 +177,18 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
 
         if unmatch:
             print 'Unmatching authors!!!'
-            print paper
+            print paper.bib
+            print
+            print 'search URL: '+scholarURL
             if continueOrExit():
                 continue
             search['manuallyAcceptedSc'] += 1
 
         if search['year'] and not search['year-forced'] and paper.bib['year'] != search['year']:
             print 'Unmatching year!!!'
-            print paper
+            print paper.bib
+            print
+            print 'search URL: '+scholarURL
             if continueOrExit():
                 continue
             if not unmatch:
