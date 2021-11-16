@@ -119,18 +119,146 @@ def searchAndAppend(nArticle,title,querier,writer,writer_r='',lastTry='',tryAgai
             break
         print "Scholar ("+str(i+1)+'/'+str(MAX_SCHO)+'):',paper.bib['title']
 
-        if compareTitles(cleanTitle(title)[0:MAX_CHAR], cleanTitle(paper.bib['title'])[0:MAX_CHAR]):
-            scholarFound = True
-            print 'Found: ',paper.bib['title']
-            print 'Authors:',paper.bib['author']
-            print 'Cited by:',paper.citedby
-            
-            if writer_r and lastFromCrossref == 0:
-                # print "Adding writter"
-                addItemResumee(writer_r,nArticle,title,author,paper.citedby)
+        if search['last-try']:
+            search['title'] = search['title'].replace(' '+search['last-try'],'')
 
-            if paper.citedby:
-                ## Searching citations to article
+        titleComparison = compareTitles(cleanTitle(search['title'])[0:MAX_CHAR], cleanTitle(paper.bib['title'])[0:MAX_CHAR])
+
+        if not titleComparison:
+            print 'Unmatching title in scholar'
+            print paper
+            print
+            if continueOrExit():
+                continue
+            search['manuallyAcceptedSc'] += 100
+
+        # if compareTitles(cleanTitle(search['title'])[0:MAX_CHAR], cleanTitle(paper.bib['title'])[0:MAX_CHAR]):
+        unmatch = True
+        if search['author']:
+            for author in paper.bib['author'].lower().split(', '):
+                lastName = author.split(' ')
+                if len(lastName)>1:
+                    lastName = lastName[1]
+                    initial = author[0]
+                else:
+                    initial = ''
+                lastName2 = search['author'].lower().split(' ')[0]
+                initial2 = search['author'].lower().split(' ')[1][0]
+
+                if not compareTitles(lastName,lastName2) or (initial and not initial == initial2):
+                    print '\tUnmatching author:',paper.bib['author'],'('+initial+' '+lastName+')','('+initial2+' '+lastName2+')'
+                    continue
+                else:
+                    unmatch = False
+                    break
+
+        if unmatch:
+            print 'Unmatching authors!!!'
+            if continueOrExit():
+                continue
+            search['manuallyAcceptedSc'] += 1
+
+        if search['year'] and not search['year-forced'] and paper.bib['year'] != search['year']:
+            print 'Unmatching year!!!'
+            if continueOrExit():
+                continue
+            if not unmatch:
+                search['manuallyAcceptedSc'] += 1
+
+        scholarFound = True
+        print 'Found: ',paper.bib['title']
+        print 'Authors:',paper.bib['author'],'('+initial2+' '+lastName2+')' if search['author'] else ''
+        print 'Cited by:',paper.citedby
+        
+        if writer_r and lastFromCrossref == 0:
+            # print "Adding writter"
+            addItemResumee(writer_r,search['nArticle'],search['title'],search['author'],paper.citedby,
+                manuallyAcceptedSc=search['manuallyAcceptedSc'],search=sEntry,forcedYear=search['year'] if search['year-forced'] else None)
+
+        count = 0
+        if paper.citedby:
+            ## Searching citations to article
+            print
+            print 'Searching cited by ('+str(lastFromCrossref)+')'
+            cb = paper.get_citedby(startAt=lastFromCrossref)
+            count = lastFromCrossref
+
+            print
+            for citation in cb:
+                time.sleep(4*0.03)
+                if (count < lastFromCrossref):
+                    count += 1
+                    print str(count)+': '+citation.bib['title']
+                    continue
+
+                bibItem = citation.bib
+
+                print '\tArticle('+str(count+1)+'/'+str(paper.citedby)+')\t',bibItem['title']
+                print '\tAuthors\t\t',bibItem['author']
+                print '\tVolume\t\t',bibItem['volume']
+                print '\tPublisher\t',bibItem['publisher']
+
+                cit_cleanTitle = cleanTitle(bibItem['title'].encode("ascii","ignore"))[0:MAX_CHAR]
+                crSearch = cr.works(query=bibItem['title']+' '+bibItem['author'],limit=10)
+                found = False
+
+                search['manuallyAcceptedCr'] = 0
+
+                for z in crSearch['message']['items']:
+                    crTitle = z.get('title','')
+                    if crTitle:
+                        crTitle = crTitle[0]
+                        authorData = reprintCrossReffAuthors(z.get('author',''))
+                        print '\tCrossref item:\t',crTitle
+                        print '\t\t\t\tBy: '+authorData
+                        if compareTitles(cit_cleanTitle, cleanTitle(crTitle.encode("ascii","ignore"))[0:MAX_CHAR]):
+                            if z.get('author',''):
+                                match = False
+                                for crAuthors in z.get('author',''):
+                                    crAuthor = crAuthors.get('family','').lower().split(' ')
+                                    if not crAuthor:
+                                        continue
+                                    if isinstance(crAuthor,list):
+                                        crAuthor = crAuthor[-1]
+                                    for author in bibItem['author'].lower().split(', '):
+                                        lastName = author.split(' ')
+                                        if isinstance(lastName,list):
+                                            lastName = lastName[-1]
+
+                                        if compareTitles(cleanTitle(crAuthor.encode("ascii","ignore")), cleanTitle(lastName)):
+                                            match = True
+                                            break
+                                        print 'Unmatching author:',lastName,'('+crAuthor.encode("ascii","ignore")+')'
+                                    if match:
+                                        break
+                                if not match:
+                                    print 'Unmatching authors:',lastName,'('+crAuthor+')'
+                                    if continueOrExit():
+                                        continue
+                                    search['manuallyAcceptedCr'] += 1
+
+                            print '\tDOI:\t\t',z['DOI']
+                            print '\tSubject:\t',z.get('subject')
+
+                            found = True
+                            if not authorData:
+                                authorData = bibItem['author']
+
+                            cTitle = z.get('container-title','')
+                            if cTitle:
+                                cTitle = cTitle[0]
+
+                            addItem(writer,count,z.get('title')[0],authors=authorData,container=cTitle,
+                                pub=z.get('publisher',''),type=z.get('type',''),doi=z.get('DOI',''),
+                                vol=z.get('volume',''),issue=z.get('issue',''),nCitedArticle=search['nArticle'],
+                                manuallyAcceptedCr=search['manuallyAcceptedCr'])
+                            break
+
+                if not found:
+                    print '\t*** Unable to find title in Crossref! ***'
+
+                    addItem(writer,count,bibItem['title'],authors=bibItem['author'],pub=bibItem['publisher'],type='other',nCitedArticle=search['nArticle'])
+
                 print
                 print 'Searching cited by ('+str(lastFromCrossref)+')'
                 cb = paper.get_citedby()
