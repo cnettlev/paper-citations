@@ -17,10 +17,10 @@ parser.add_option("-l", "--lastTry", dest="lastTry", default=None,
                   help="(Optional) If INPUT_CSV is given, another identified named as LAST_TRY is appended to a title if the title alone is not enough for finding the article. If there is no identifier in the CSV file or ARTICLE_TITLE is given, LAST_TRY is appended to the title.", metavar="LAST_TRY")
 parser.add_option("-m", "--match-percent", dest="matcher", type="float", default=1,
                   help="When titles are compared, a matching percentage can be use, to avoid hard exact comparitons. [default: %default]", metavar="MATCH")
-parser.add_option("-M", "--max-scholar", dest="mscholar", type="int", default=5,
-                  help="Sets the maximum number of gscholar for comparing with the searched title. [default: %default]", metavar="MAXSCH")
 parser.add_option("-n", "--not-found", dest="saveNotFound", action="store_true", default=False,
-                  help="Flag that enables the storing a not-found.csv file containing a resummee of the articles already searched for but that weren't found. [default: %default]", metavar="MATCH")
+                  help="Flag that enables the storing a not-found.csv file containing a resummee of the articles already searched for but that weren't found. [default: %default]", metavar="NFOUND")
+parser.add_option("--notify", dest="notify", action="store_true", default=False,
+                  help="Enables system notifications when user inputs are required. [default: %default]", metavar="NTFY")
 parser.add_option("-o", "--output", dest="outFile", default='',
                   help="(Optional) Name of the output CSV file containing the articles citing the list from INPUT_CSV. By default, the file uses the INPUT_CSV name as \"cit_INPUT_CSV\" or, similarly, the ARTICLE_TITLE.", metavar="OUTPUT_CSV")
 parser.add_option("-p", "--proxy", dest="proxy", default='',
@@ -33,9 +33,9 @@ parser.add_option("-t", "--title", dest="title", default='',
 (options, args) = parser.parse_args()
 
 if not options.inFile and not options.title:
-	print "Usage error!!!\n"
-	parser.print_help()
-	exit()
+      print "Usage error!!!\n"
+      parser.print_help()
+      exit()
 
 options.resumeeFolder = options.resumeeFolder.rstrip('/')
 if not os.path.exists(options.resumeeFolder):
@@ -45,16 +45,16 @@ if not os.path.exists(options.resumeeFolder):
 [outFolder,outFile] = os.path.split(options.outFile)
 
 if not options.outFile:
-	if options.inFile:
-		options.outFile = inFolder + 'cit_' + inFile
-		options.resumee = options.resumeeFolder+'/cit_r_' + inFile
-	else:
-		options.outFile = 'cit_' + options.title + '.csv'
-		options.resumee = ''
+      if options.inFile:
+            options.outFile = inFolder + 'cit_' + inFile
+            options.resumee = options.resumeeFolder+'/cit_r_' + inFile
+      else:
+            options.outFile = 'cit_' + options.title + '.csv'
+            options.resumee = ''
 else:
-	options.resumee = options.resumeeFolder+'/r-' + outFile
+      options.resumee = options.resumeeFolder+'/r-' + outFile
 
 if not options.inDelimiter:
-	options.inDelimiter = options.delimiter
+      options.inDelimiter = options.delimiter
 if not options.outDelimiter:
-	options.outDelimiter = options.delimiter
+      options.outDelimiter = options.delimiter

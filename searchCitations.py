@@ -19,8 +19,11 @@ except ImportError:
 # Retrieving command-line arguments
 from searchCitations_Options import options
 
+if options.notify:
+    from ntfy import notify
+
 MAX_CHAR = 100 # Maximum characters to be compared as title (for too long titles scholar might use ...)
-MAX_SCHO = options.mscholar   # Maximum entries to check with searched item (default: 5)
+MAX_SCHO = 5   # Maximum entries to check with searched item
 
 ## For completing data using Crossref API habanero
 cr = Crossref()
@@ -54,63 +57,74 @@ def compareTitles(title1,title2,opt=options.matcher):
     else:
         return title1==title2
 
-## Dictionary item
-dItem = OrderedDict([('No. Citation',''),('Title',''),('First Author',''),('Authors',''),('Container',''),('Publisher',''),('Document Type',''),('DOI',''),('Volume',''),('Issue',''),('No. Article','')])
-rItem = OrderedDict([('No. Article',''),('Title',''),('Author',''),('Cited by',''),('Found','')])
+def continueOrExit():
+    if options.notify:
+        notify('Check the search process!', 'SearchCitations.py says:')
+    ask = raw_input('Do You Want To Accept (a), Pass (p) or run away? ')
+    if ask == 'p':
+        print "... passed!"
+        return 1
+    elif ask == 'a':
+        print "... accepted."
+        return 0
+    sys.exit(1)
 
-def addItem(wtr,nCitation,title,authors='',container='',pub='',type='',doi='',vol='',issue='',nCitedArticle=0):
+## Dictionary item
+dItem = OrderedDict([('No. Citation',''),('Title',''),('First Author',''),('Authors',''),('Container',''),('Publisher',''),('Document Type',''),('DOI',''),('Volume',''),('Issue',''),('No. Article',''),('Crossref manual acceptance','')])
+rItem = OrderedDict([('No. Article',''),('Title',''),('Author',''),('Search',''),('Forced year',None),('Cited by',''),('Found',''),('Scholar manual acceptance','')])
+sItem = dict([('title',''),('author',''),('year',''),('year-forced',True),('last-try',''),('DOI',''),('manuallyAcceptedSc',0),('manuallyAcceptedCr',0),('nArticle',0)])
+
+def addItem(wtr,nCitation,title,authors='',container='',pub='',type='',doi='',vol='',issue='',nCitedArticle=0,manuallyAcceptedCr=0):
     if reformat:
         reformat.reformatAuthors(authors)
 
-    dItem['No. Citation']  = nCitation
-    dItem['Title']         = title
-    dItem['First Author']  = authors.split(',')[0]
-    dItem['Authors']       = authors
-    dItem['Container']     = container
-    dItem['Publisher']     = pub
-    dItem['Document Type'] = type
-    dItem['DOI']           = doi
-    dItem['Volume']        = vol
-    dItem['Issue']         = issue
-    dItem['No. Article']   = nCitedArticle
+    dItem['No. Citation']       = nCitation
+    dItem['Title']              = title
+    dItem['First Author']       = authors.split(',')[0]
+    dItem['Authors']            = authors
+    dItem['Container']          = container
+    dItem['Publisher']          = pub
+    dItem['Document Type']      = type
+    dItem['DOI']                = doi
+    dItem['Volume']             = vol
+    dItem['Issue']              = issue
+    dItem['No. Article']        = nCitedArticle
+    dItem['Crossref manual acceptance']   = manuallyAcceptedCr
 
     wtr.writerow(dItem)
 
-def addItemResumee(wtr,nCitedArticle,title,author,citations,found=1):
-    rItem['No. Article']   = nCitedArticle
-    rItem['Title']         = title
-    rItem['Author']        = author
-    rItem['Cited by']      = citations
-    rItem['Found']         = found
+def addItemResumee(wtr,resumeeItem):
+    rItem = resumeeItem
 
     wtr.writerow(rItem)
 
-# def replaceProxy(querier,api = proxy_api):
-#     # proxy = api.get_proxy()
-#     # paddr = proxy['curl']
-#     paddr = proxies.pop(0)
-#     #if proxy['supportsHttps']:
-#     #    paddr.replace('http:','https:')
-#     print "Changing proxy to",paddr
-# 
-#     querier.set_proxy(paddr)
+def addItemResumee(wtr,nCitedArticle,title,author,citations,found=1,manuallyAcceptedSc=0,search='',forcedYear=None):
+    rItem['No. Article']   = nCitedArticle
+    rItem['Title']         = title
+    rItem['Author']        = author
+    rItem['Search']        = search
+    rItem['Forced year']   = forcedYear
+    rItem['Cited by']      = citations
+    rItem['Found']         = found
+    rItem['Scholar manual acceptance']   = manuallyAcceptedSc
 
-def searchAndAppend(nArticle,title,querier,writer,writer_r='',lastTry='',tryAgain=1, previousWorked = False):
-    global lastFromCrossref #, working
-    if len(title) == 2:
-        author = title[1]
-        title = title[0]
-    else:
-        author = ''
+    wtr.writerow(rItem)
 
-    print 'Searching for',title
+def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWorked = False):
+    global lastFromCrossref, working
+
+    sEntry = search['DOI'] if search['DOI'] else search['title']+' '+search['author'] 
+
+    print 'Searching for',search['title']
+    print '\t\t as',sEntry
     ## Searching into scholar
-    scholarSearch = querier.search_pubs_query(title)
+    if search['year'] and search['year-forced']:
+        print '\t\t ** forcing year as',search['year'],'**'
+        scholarSearch = querier.search_pubs_query(sEntry,years=int(search['year']))
+    else:
+        scholarSearch = querier.search_pubs_query(sEntry)
     scholarFound = False
     scholarWorked = False
-    
-    if lastTry:
-        title = title.replace(' '+lastTry,'')
 
     for i in range(MAX_SCHO):
         paper = next(scholarSearch,None)
@@ -121,6 +135,7 @@ def searchAndAppend(nArticle,title,querier,writer,writer_r='',lastTry='',tryAgai
 
         if search['last-try']:
             search['title'] = search['title'].replace(' '+search['last-try'],'')
+        count = 0
 
         titleComparison = compareTitles(cleanTitle(search['title'])[0:MAX_CHAR], cleanTitle(paper.bib['title'])[0:MAX_CHAR])
 
@@ -146,7 +161,13 @@ def searchAndAppend(nArticle,title,querier,writer,writer_r='',lastTry='',tryAgai
                 initial2 = search['author'].lower().split(' ')[1][0]
 
                 if not compareTitles(lastName,lastName2) or (initial and not initial == initial2):
-                    print '\tUnmatching author:',paper.bib['author'],'('+initial+' '+lastName+')','('+initial2+' '+lastName2+')'
+                    print '\tUnmatching author:',paper.bib['author']
+                    print '\tFrom found: ',
+                    print initial,
+                    print lastName,
+                    print 'From search: ',
+                    print initial2,
+                    print lastName2
                     continue
                 else:
                     unmatch = False
@@ -154,12 +175,14 @@ def searchAndAppend(nArticle,title,querier,writer,writer_r='',lastTry='',tryAgai
 
         if unmatch:
             print 'Unmatching authors!!!'
+            print paper
             if continueOrExit():
                 continue
             search['manuallyAcceptedSc'] += 1
 
         if search['year'] and not search['year-forced'] and paper.bib['year'] != search['year']:
             print 'Unmatching year!!!'
+            print paper
             if continueOrExit():
                 continue
             if not unmatch:
@@ -175,7 +198,6 @@ def searchAndAppend(nArticle,title,querier,writer,writer_r='',lastTry='',tryAgai
             addItemResumee(writer_r,search['nArticle'],search['title'],search['author'],paper.citedby,
                 manuallyAcceptedSc=search['manuallyAcceptedSc'],search=sEntry,forcedYear=search['year'] if search['year-forced'] else None)
 
-        count = 0
         if paper.citedby:
             ## Searching citations to article
             print
@@ -260,92 +282,50 @@ def searchAndAppend(nArticle,title,querier,writer,writer_r='',lastTry='',tryAgai
                     addItem(writer,count,bibItem['title'],authors=bibItem['author'],pub=bibItem['publisher'],type='other',nCitedArticle=search['nArticle'])
 
                 print
-                print 'Searching cited by ('+str(lastFromCrossref)+')'
-                cb = paper.get_citedby()
-                count = 0
+                count += 1
+                lastFromCrossref = 0
 
-                print
-                for citation in cb:
-                    time.sleep(4*0.03)
-                    if (count < lastFromCrossref):
-                        count += 1
-                        print str(count)+': '+citation.bib['title']
-                        continue
+            if count != paper.citedby:
+                print "\n\nError communicating with google-scholar.\nExiting...\n"
+                exit(404)
+        break
 
-                    bibItem = citation.bib
+    print "Searching results: \n\tscholarFound:",scholarFound,"\n\tscholarWorked:",scholarWorked,"\n\tworking:",working,"\n\tpreviousWorked:",previousWorked
+    if paper:
+        print "\tcount:",count,"\n\tcited by:",paper.citedby
 
-                    print '\tArticle('+str(count+1)+'/'+str(paper.citedby)+')\t',bibItem['title']
-                    print '\tAuthors\t\t',bibItem['author']
-                    print '\tVolume\t\t',bibItem['volume']
-                    print '\tPublisher\t',bibItem['publisher']
-
-                    cit_cleanTitle = cleanTitle(bibItem['title'].encode("ascii","ignore"))[0:MAX_CHAR]
-                    crSearch = cr.works(query=bibItem['title'].lower()+' '+bibItem['author'],limit=10)
-                    found = False
-
-                    for z in crSearch['message']['items']:
-                        crTitle = z.get('title','')
-                        if crTitle:
-                            crTitle = crTitle[0]
-                            print '\tCrossref item:\t',crTitle
-                            if compareTitles(cit_cleanTitle, cleanTitle(crTitle.encode("ascii","ignore"))[0:MAX_CHAR]):
-                                print '\tDOI:\t\t',z['DOI']
-                                print '\tSubject:\t',z.get('subject')
-
-                                found = True
-                                authorData = reprintCrossReffAuthors(z.get('author',''))
-                                if not authorData:
-                                    authorData = bibItem['author']
-
-                                cTitle = z.get('container-title','')
-                                if cTitle:
-                                    cTitle = cTitle[0]
-
-                                addItem(writer,count,z.get('title')[0],authors=authorData,container=cTitle,
-                                    pub=z.get('publisher',''),type=z.get('type',''),doi=z.get('DOI',''),
-                                    vol=z.get('volume',''),issue=z.get('issue',''),nCitedArticle=nArticle)
-                                break
-
-                    if not found:
-                        print '\t*** Unable to find title in Crossref! ***'
-
-                        addItem(writer,count,bibItem['title'],authors=bibItem['author'],pub=bibItem['publisher'],type='other',nCitedArticle=nArticle)
-
-                    print
-                    count += 1
-                    lastFromCrossref = 0
-
-                if count != paper.citedby:
-                    print "\n\nError communicating with google-scholar.\nExiting...\n"
-                    exit(1)
-            break
     if not scholarFound:
         print 'Not found!!'
-        if tryAgain==1 and lastTry:
-            title = (title+' '+lastTry,author)
-            searchAndAppend(nArticle,title,querier,writer,writer_r,lastTry,2,scholarWorked)
-        elif tryAgain==2 and lastTry:
-            title = (title+' '+author,author)
-            searchAndAppend(nArticle,title,querier,writer,writer_r,author,0,scholarWorked)
+        if tryAgain and search['last-try']:
+            print "try again and last try"
+            search['title'] = search['title']+' '+search['last-try']
+            searchAndAppend(search,querier,writer,writer_r,False,scholarWorked)
         else:
-            if lastTry:
-                title = title.replace(' '+lastTry,'')
+            print "try again & last try - the other one"
+            if search['last-try']:
+                print "last try"
+                search['title'] = search['title'].replace(' '+search['last-try'],'')
+            if search['year-forced']:
+                print "Relaxing year"
+                search['year-forced'] = False
+                searchAndAppend(search,querier,writer,writer_r,True,scholarWorked)
+                return
+            # try again only to check if queries are working
             if previousWorked and not scholarWorked: 
-            # try again to check if queries are working
-                title = (title,author)
-                searchAndAppend(nArticle,title,querier,writer,writer_r,'',0,scholarWorked)
+                print "previousWorked & !scholarWorked"
+                search['last-try'] = ''
+                searchAndAppend(search,querier,writer,writer_r,False,scholarWorked)
+                return
             if scholarWorked:
-                addItemResumee(writer_r,nArticle,title,author,0,0)
+                print "scholarWorked"
+                addItemResumee(writer_r,search['nArticle'],search['title'],search['author'],0,0)
             else:
-                # If proxy use is set, then try to continue with another proxy
-                # if options.proxy:
-                #     replaceProxy(querier)
-                #    searchAndAppend(nArticle,title,querier,writer,writer_r,lastTry,True)
-                # Otherwise, there is no other thing to do but quit
-                addItemResumee(writer_r,nArticle,title,author,0,-1)
-                # working = False
+                print "scholarWorked - the other one"
+                print search
+                addItemResumee(writer_r,search['nArticle'],search['title'],search['author'],-1,0)
+                working = False
 
-def start_from_previous_work():
+def start_from_previous_work(saveNotFound=options.saveNotFound):
     # Check, clean and retreive information about existing data
     if path.exists(options.resumee):
         with open(options.resumee) as resumee, open(options.outFile) as output_file:
@@ -361,7 +341,7 @@ def start_from_previous_work():
             other = csv.DictWriter(new_resumee, rItem.keys(),encoding='utf-8',delimiter=options.outDelimiter)
             other.writeheader()
 
-            if options.saveNotFound:
+            if saveNotFound:
                 nFound = open('notfound.csv','a')
                 nfWriter = csv.DictWriter(nFound, rItem.keys(),encoding='utf-8',delimiter=options.outDelimiter)
                 nfWriter.writeheader()
@@ -382,16 +362,18 @@ def start_from_previous_work():
                         if int(storedCitation['No. Article']) == cArticle:
                             stored += 1
                             # print "Stored:",stored
+                        else:
+                            break
                     except Exception as e:
-                        # print e
+                        print e
                         break
                 print "Stored/expected",stored,expected,"\t\t",rArticle,cArticle
-                if options.saveNotFound and (row.get('Found','')=='0' or row.get('Found','')=='-1'):
-                    addItemResumee(nfWriter,cArticle,row.get('Title',''),row.get('Author',''),row.get('Cited by',''),row.get('Found',''))
+                if saveNotFound and row.get('Found','')=='0':
+                    nfWriter.writerow(row)
                 if expected == -1:
                     break
                 if stored > 0 or (stored == 0 and expected == 0):
-                    addItemResumee(other,cArticle,row.get('Title',''),row.get('Author',''),row.get('Cited by',''),row.get('Found',''))
+                    other.writerow(row)
                 if stored != expected:
                     lastCitations = stored
                     break
@@ -407,19 +389,7 @@ def start_from_previous_work():
 pArticles, lastFromCrossref = start_from_previous_work()
 alreadyHere = path.exists(options.outFile)
 openWith = 'a'
-#working = True
-# 
-# if alreadyHere:
-#     print "Output file "+options.outFile+" already exists. Trying to continue there..."
-#     with open(options.outFile) as output_file:
-#         reader = csv.DictReader(output_file,delimiter=options.outDelimiter)
-#         nArticles = len(list(reader))
-#         if nArticles > pCitations and lastCitations > (nArticles-pCitations):
-#             lastFromCrossref = nArticles - pCitations
-#             print "Last citations must be ",lastCitations,"but only",pCitations-nArticles,"where found. Starting at last citation:",lastFromCrossref
-#         elif pCitations != nArticles: # inconsistent data from previous processing
-#             openWith = 'wb'
-#             alreadyHere = False
+working = True
 
 ## Writing results in CSV
 with open(options.outFile,openWith) as output_file:
@@ -456,50 +426,44 @@ with open(options.outFile,openWith) as output_file:
                 elif cArticle-1 != int(row.get('','-1')):
                     print cArticle-1, int(row.get('','-1'))
                     print 'Error: article number inconsistent with the one from input CSV.'
-                    exit()
+                    exit(1)
 
                 print "\nArticle",cArticle,"("+str(cArticle-1)+")","of",nArticles
 
                 ## Title to be search in google scholar
-                title = row.get('Title','') # 'The interaction of maturational constraints and intrinsic motivations in active motor development'
+                sItem['title'] = row.get('Title','') # 'The interaction of maturational constraints and intrinsic motivations in active motor development'
+                sItem['nArticle'] = cArticle-1
+                sItem['DOI'] = row.get('DOI','')
 
-                if not title:
-                    title = row.get('Article Title','')
-                if not title:
+                if not sItem['title']:
+                    sItem['title'] = row.get('Article Title','')
+                if not sItem['title']:
                     print 'Error with CSV identifier. It must contain either Title or Article Title'
-                    exit()
+                    exit(1)
 
                 if options.resumee:
-                    author = row.get('Authors','')
-                    title = (title,author)
+                    sItem['author'] = row.get('Authors','')
+                    sItem['year'] = row.get('Year','')
+                    sItem['year-forced'] = True
 
-                if options.lastTry:
-                    lt = ''
-                    if options.lastTry is not None:
-                        lt = row.get(options.lastTry,'')
-                        if not lt:
-                            lt = options.lastTry
-                    searchAndAppend(cArticle-1,title,scQuerier,dict_writer,dict_writer_r,lt)
-                else:
-                    searchAndAppend(cArticle-1,title,scQuerier,dict_writer,dict_writer_r)
+                if options.lastTry is not None:
+                    sItem['last-try'] = row.get(options.lastTry,'')
+                    if not sItem['last-try']:
+                        sItem['last-try'] = options.lastTry
+                searchAndAppend(sItem,scQuerier,dict_writer,dict_writer_r)
 
                 output_file.flush()
                 if options.resumee:
                     resumee.flush()
 
-                # if not working:
-                #     print "\n\nError, probably communicating with google-scholar (your IP has been blocked).\nExiting...\n"
-                #     exit(1)
+                if not working:
+                    print "\n\nError, probably communicating with google-scholar (your IP has been blocked).\nExiting...\n"
+                    exit(404)
 
                 cArticle += 1
         if options.resumee:
             resumee.close()
     else:
-        searchAndAppend(0,options.title,scQuerier,dict_writer,lastTry=options.lastTry)
-
-# ## Writing results in CSV
-# if len(articlesDict):
-#   with open(options.outFile,'wb') as output_file:
-#       dict_writer = csv.DictWriter(output_file, articlesDict[0].keys(),encoding='utf-8',delimiter=options.outDelimiter)
-#       dict_writer.writeheader()
-#       dict_writer.writerows(articlesDict)
+        sItem['title'] = options.title
+        sItem['last-try'] = options.lastTry
+        searchAndAppend(sItem,scQuerier,dict_writer)
