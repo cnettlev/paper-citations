@@ -138,11 +138,13 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
         count = 0
 
         titleComparison = compareTitles(cleanTitle(search['title'])[0:MAX_CHAR], cleanTitle(paper.bib['title'])[0:MAX_CHAR])
+        scholarURL = 'https://scholar.google.com/scholar?q='+sEntry.replace(' ','+')
 
         if not titleComparison:
             print 'Unmatching title in scholar'
-            print paper
+            print paper.bib
             print
+            print 'search URL: '+scholarURL
             if continueOrExit():
                 continue
             search['manuallyAcceptedSc'] += 100
@@ -220,8 +222,9 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
                 print '\tVolume\t\t',bibItem['volume']
                 print '\tPublisher\t',bibItem['publisher']
 
+                cr_query = bibItem['title']+' '+bibItem['author']
                 cit_cleanTitle = cleanTitle(bibItem['title'].encode("ascii","ignore"))[0:MAX_CHAR]
-                crSearch = cr.works(query=bibItem['title']+' '+bibItem['author'],limit=10)
+                crSearch = cr.works(query=cr_query,limit=10)
                 found = False
 
                 search['manuallyAcceptedCr'] = 0
@@ -230,6 +233,8 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
                     crTitle = z.get('title','')
                     if crTitle:
                         crTitle = crTitle[0]
+                        if not crTitle.strip():
+                            print "empty title"
                         authorData = reprintCrossReffAuthors(z.get('author',''))
                         print '\tCrossref item:\t',crTitle
                         print '\t\t\t\tBy: '+authorData
@@ -254,7 +259,12 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
                                     if match:
                                         break
                                 if not match:
-                                    print 'Unmatching authors:',lastName,'('+crAuthor+')'
+                                    # print 'Unmatching authors:',lastName,'('+crAuthor+')'
+                                    print
+                                    print 'Crossref search: '+'https://search.crossref.org/?from_ui=yes&q='+cr_query
+                                    print 'Crossref article URL: '+z.get('URL','')
+                                    print 'Scholar URL: '+bibItem.get('url','')
+                                    print 'Scholar ePrint: '+bibItem.get('eprint','')
                                     if continueOrExit():
                                         continue
                                     search['manuallyAcceptedCr'] += 1
