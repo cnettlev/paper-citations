@@ -140,12 +140,17 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
         titleComparison = compareTitles(cleanTitle(search['title'])[0:MAX_CHAR], cleanTitle(paper.bib['title'])[0:MAX_CHAR])
         scholarURL = 'https://scholar.google.com/scholar?q='+sEntry.replace(' ','+')
 
-        if not titleComparison:
-            print 'Unmatching title in scholar'
-            print paper.bib
+        def unmatchRequest(text,scholarEntry, search = scholarURL):
+            print text
+            print scholarEntry.bib
             print
-            print 'search URL: '+scholarURL
-            if continueOrExit():
+            print 'search URL: '+search
+            print 'entry URL: '+scholarEntry.bib.get('url')
+            print 'entry ePrint: '+scholarEntry.bib.get('eprint').replace('https://scholar.google.com','')
+            return continueOrExit()
+
+        if not titleComparison:
+            if unmatchRequest('Unmatching title in scholar',paper):
                 continue
             search['manuallyAcceptedSc'] += 100
 
@@ -176,20 +181,12 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
                     break
 
         if unmatch:
-            print 'Unmatching authors!!!'
-            print paper.bib
-            print
-            print 'search URL: '+scholarURL
-            if continueOrExit():
+            if unmatchRequest('Unmatching authors!!!',paper):
                 continue
             search['manuallyAcceptedSc'] += 1
 
         if search['year'] and not search['year-forced'] and paper.bib['year'] != search['year']:
-            print 'Unmatching year!!!'
-            print paper.bib
-            print
-            print 'search URL: '+scholarURL
-            if continueOrExit():
+            if unmatchRequest('Unmatching year!!!',paper):
                 continue
             if not unmatch:
                 search['manuallyAcceptedSc'] += 1
@@ -239,6 +236,7 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
                         crTitle = crTitle[0]
                         if not crTitle.strip():
                             print "empty title"
+                            continue
                         authorData = reprintCrossReffAuthors(z.get('author',''))
                         print '\tCrossref item:\t',crTitle
                         print '\t\t\t\tBy: '+authorData
@@ -265,10 +263,10 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
                                 if not match:
                                     # print 'Unmatching authors:',lastName,'('+crAuthor+')'
                                     print
-                                    print 'Crossref search: '+'https://search.crossref.org/?from_ui=yes&q='+cr_query
+                                    print 'Crossref search: '+'https://search.crossref.org/?q='+cr_query.replace(' ','+')
                                     print 'Crossref article URL: '+z.get('URL','')
                                     print 'Scholar URL: '+bibItem.get('url','')
-                                    print 'Scholar ePrint: '+bibItem.get('eprint','')
+                                    print 'Scholar ePrint: '+bibItem.get('eprint','').replace('https://scholar.google.com','')
                                     if continueOrExit():
                                         continue
                                     search['manuallyAcceptedCr'] += 1
