@@ -117,10 +117,13 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
 
     print 'Searching for',search['title']
     print '\t\t as',sEntry
+    sYearEntry = ''
+
     ## Searching into scholar
     if search['year'] and search['year-forced']:
         print '\t\t ** forcing year as',search['year'],'**'
         scholarSearch = querier.search_pubs_query(sEntry,years=int(search['year']))
+        sYearEntry = '&as_ylo='+search['year']+'&as_yhi='+search['year']
     else:
         scholarSearch = querier.search_pubs_query(sEntry)
     scholarFound = False
@@ -138,15 +141,15 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
         count = 0
 
         titleComparison = compareTitles(cleanTitle(search['title'])[0:MAX_CHAR], cleanTitle(paper.bib['title'])[0:MAX_CHAR])
-        scholarURL = 'https://scholar.google.com/scholar?q='+sEntry.replace(' ','+')
+        scholarURL = 'https://scholar.google.com/scholar?q='+sEntry.replace(' ','+')+sYearEntry
 
         def unmatchRequest(text,scholarEntry, search = scholarURL):
             print text
             print scholarEntry.bib
             print
             print 'search URL: '+search
-            print 'entry URL: '+scholarEntry.bib.get('url')
-            print 'entry ePrint: '+scholarEntry.bib.get('eprint').replace('https://scholar.google.com','')
+            print 'entry URL: '+scholarEntry.bib.get('url','')
+            print 'entry ePrint: '+scholarEntry.bib.get('eprint','').replace('https://scholar.google.com','')
             return continueOrExit()
 
         if not titleComparison:
