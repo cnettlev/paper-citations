@@ -85,7 +85,7 @@ def urlEncode(url):
 ## Dictionary item
 dItem = OrderedDict([('No. Citation',''),('Title',''),('First Author',''),('Authors',''),('Container',''),('Publisher',''),('Document Type',''),('DOI',''),('Volume',''),('Issue',''),('No. Article',''),('Crossref manual acceptance','')])
 rItem = OrderedDict([('No. Article',''),('Title',''),('Author',''),('Search',''),('Forced year',''),('Cited by',''),('Found',''),('Scholar manual acceptance','')])
-sItem = dict([('title',''),('author',''),('year',''),('year-forced',True),('last-try',''),('DOI',''),('manuallyAcceptedSc',0),('manuallyAcceptedCr',''),('nArticle',0)])
+sItem = dict([('title',''),('author',''),('year',''),('year-forced',True),('last-try',''),('DOI',''),('manuallyAcceptedSc',''),('manuallyAcceptedCr',''),('nArticle',0)])
 
 def addItem(wtr,nCitation,title,authors='',container='',pub='',type='',doi='',vol='',issue='',nCitedArticle=0,manuallyAcceptedCr=''):
     if reformat:
@@ -158,14 +158,13 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
 
         def unmatchRequest(text,scholarEntry, search = scholarURL):
             print text
-            print
-            print 'author: '+scholarEntry.bib.get('author','')
+
+            print '\nauthor: '+scholarEntry.bib.get('author','')
+            print 'publisher: '+scholarEntry.bib.get('publisher','')
             print 'search URL: '+search
             print 'entry URL: '+scholarEntry.bib.get('url','')
             print 'entry ePrint: '+scholarEntry.bib.get('eprint','').replace('https://scholar.google.com','')
             return continueOrExit()
-
-        search['manuallyAcceptedSc'] = ''
 
         if not titleComparison:
             if unmatchRequest('Unmatching title in scholar',paper):
@@ -264,13 +263,11 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
                                 for crAuthors in z.get('author',''):
                                     crAuthor = crAuthors.get('family','').lower().split(' ')
                                     if not crAuthor:
-                                        continue
+                                        break
                                     if isinstance(crAuthor,list):
                                         crAuthor = crAuthor[-1]
                                     if not crAuthor.strip():
-                                        print "*****EMPTY AUTHOR****"
-                                        if continueOrExit():
-                                            continue
+                                        break
                                     for author in bibItem['author'].lower().split(', '):
                                         lastName = author.split(' ')
                                         if isinstance(lastName,list):
@@ -283,6 +280,8 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
                                     if match:
                                         break
                                 if not match:
+                                    if not crAuthor or not crAuthor.strip():
+                                        continue
                                     print
                                     print 'Crossref search: '+'https://search.crossref.org/?q='+urlEncode(cr_query)
                                     print 'Crossref article URL: '+z.get('URL','')
@@ -474,6 +473,8 @@ with open(options.outFile,openWith) as output_file:
                 sItem['title'] = row.get('Title','') # 'The interaction of maturational constraints and intrinsic motivations in active motor development'
                 sItem['nArticle'] = cArticle-1
                 sItem['DOI'] = row.get('DOI','')
+                sItem['manuallyAcceptedSc'] = ''
+
 
                 if not sItem['title']:
                     sItem['title'] = row.get('Article Title','')
