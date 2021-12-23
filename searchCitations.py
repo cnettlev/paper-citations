@@ -175,6 +175,7 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
 
         if not titleComparison:
             if unmatchRequest('** Unmatching title ** - Match below '+str(int(100*options.matcher))+'%',paper):
+                print "Match: ",SequenceMatcher(None, cleanTitle(search['title'])[0:MAX_CHAR], cleanTitle(paper.bib['title'])[0:MAX_CHAR]).ratio()
                 search['manuallyAcceptedSc'] += '-titlepass'
                 continue
             search['manuallyAcceptedSc'] += '-title'
@@ -349,6 +350,10 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
                 addItemResumee(writer_r,search['nArticle'],search['title'],search['author'],0,0)
                 search['scholarTest'] = 0
                 return
+            if search['scholarTest'] and not scholarWorked:
+                working = False # flag for exiting after searchAndAppend
+                return
+
 
             if search['last-try']:
                 print "Removing 'last try' from title"
@@ -372,10 +377,10 @@ def searchAndAppend(search,querier,writer,writer_r='',tryAgain=True, previousWor
                 print "Storing article in RESUMEE as not found (scholar searching is OK)"
                 addItemResumee(writer_r,search['nArticle'],search['title'],search['author'],0,0)
             else:
-                print search
-                print "Storing article in RESUMEE as not found  (scholar searching is NOT OK -- no articles found -- )"
-                addItemResumee(writer_r,search['nArticle'],search['title'],search['author'],-1,0)
-                working = False # flag for exiting after searchAndAppend
+                print "Trying again to see if scholar queries are working... "
+                search['scholarTest'] = 1
+                searchAndAppend(search,querier,writer,writer_r, tryAgain=False, previousWorked=scholarWorked)
+                
 
 def start_from_previous_work(saveNotFound=options.saveNotFound):
     # Check, clean and retreive information about existing data
